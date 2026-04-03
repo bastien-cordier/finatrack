@@ -1,7 +1,9 @@
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -9,8 +11,24 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { Button } from "../ui/button";
+import { LineChartIcon, BarChart3 } from "lucide-react";
+import {
+  ArrowUpCircle,
+  ArrowDownCircle,
+  PiggyBank,
+  Wallet,
+} from "lucide-react";
+import { Card } from "../ui/card";
+import { StatCard } from "../ui/StatCard";
 import type { Transaction } from "../../types";
 import { calculateAnnualSummary } from "../../lib/calculations/annual";
+import {
+  formatMonthShort,
+  formatCurrency,
+  calculateChange,
+} from "../../lib/helpers";
+import { useDarkModeDetection } from "../../hooks/useDarkModeDetection";
 
 interface AnnualViewProps {
   transactions: Transaction[];
@@ -23,27 +41,129 @@ export function AnnualView({
   year,
   personName,
 }: AnnualViewProps) {
+  const [chartType, setChartType] = useState<"line" | "bar">("line");
+  const isDarkMode = useDarkModeDetection();
+
   const summary = useMemo(
     () => calculateAnnualSummary(transactions, year),
     [transactions, year],
   );
 
-  const formatMonth = (month: string) => {
-    return new Date(month + "-01").toLocaleDateString("fr-FR", {
-      month: "short",
-    });
+  const previousYear = (parseInt(year) - 1).toString();
+  const previousYearTransactions = useMemo(
+    () => transactions.filter((t) => t.date.startsWith(previousYear)),
+    [transactions, previousYear],
+  );
+
+  const previousYearSummary = useMemo(
+    () => calculateAnnualSummary(previousYearTransactions, previousYear),
+    [previousYearTransactions, previousYear],
+  );
+
+  const incomeChange = calculateChange(
+    summary.totalIncome,
+    previousYearSummary.totalIncome,
+  );
+  const expensesChange = calculateChange(
+    summary.totalExpenses,
+    previousYearSummary.totalExpenses,
+  );
+  const savingsChange = calculateChange(
+    summary.totalSavings,
+    previousYearSummary.totalSavings,
+  );
+  const balanceChange = calculateChange(
+    summary.balance,
+    previousYearSummary.balance,
+  );
+
+  const chartData = useMemo(() => {
+    const allMonths = [];
+    for (let i = 0; i < 12; i++) {
+      const monthStr = `${year}-${String(i + 1).padStart(2, "0")}`;
+      const monthData = summary.monthlyData.find((m) => m.month === monthStr);
+
+      allMonths.push({
+        month: formatMonthShort(monthStr),
+        Revenus: monthData?.income || 0,
+        Dépenses: monthData?.expenses || 0,
+        Épargne: monthData?.savings || 0,
+      });
+    }
+    return allMonths;
+  }, [summary.monthlyData, year]);
+
+  const axisStyle = {
+    tick: {
+      fill: isDarkMode ? "#a3a3a3" : "#737373",
+      fontSize: 12,
+    },
+    tickLine: {
+      stroke: isDarkMode ? "rgba(255, 255, 255, 0.1)" : "#e5e5e5",
+    },
   };
 
-  const chartData = summary.monthlyData.map((m) => ({
-    month: formatMonth(m.month),
-    Revenus: m.income,
-    Dépenses: m.expenses,
-    Épargne: m.savings,
-  }));
+  const tooltipStyle = {
+    contentStyle: {
+      backgroundColor: isDarkMode ? "#1a1a1a" : "#ffffff",
+      border: isDarkMode
+        ? "1px solid rgba(255, 255, 255, 0.1)"
+        : "1px solid #e5e5e5",
+      borderRadius: "0.5rem",
+      color: isDarkMode ? "#fafafa" : "#171717",
+      boxShadow:
+        "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+    },
+    labelStyle: {
+      color: isDarkMode ? "#fafafa" : "#171717",
+      marginBottom: "8px",
+      fontWeight: 600,
+    },
+  };
+
+  const summaryCards = [
+    {
+      label: "Revenus",
+      value: summary.totalIncome,
+      change: incomeChange,
+      icon: ArrowUpCircle,
+      iconColor: "text-emerald-500",
+      bgColor: "bg-emerald-500/10",
+    },
+    {
+      label: "Dépenses",
+      value: summary.totalExpenses,
+      change: expensesChange,
+      icon: ArrowDownCircle,
+      iconColor: "text-rose-500",
+      bgColor: "bg-rose-500/10",
+    },
+    {
+      label: "Épargne",
+      value: summary.totalSavings,
+      change: savingsChange,
+      icon: PiggyBank,
+      iconColor: "text-blue-500",
+      bgColor: "bg-blue-500/10",
+    },
+    {
+      label: "Solde",
+      value: summary.balance,
+      change: balanceChange,
+      icon: Wallet,
+      iconColor:
+        summary.balance >= 0 ? "text-emerald-500" : "text-rose-500",
+      bgColor:
+        summary.balance >= 0 ? "bg-emerald-500/10" : "bg-rose-500/10",
+      valueColorClass:
+        summary.balance >= 0
+          ? "text-emerald-600 dark:text-emerald-600"
+          : "text-rose-600 dark:text-rose-400",
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Person indicator */}
       {personName && (
         <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-xl px-4 py-3">
           <p className="text-sm text-indigo-700 dark:text-indigo-300">
@@ -53,279 +173,180 @@ export function AnnualView({
         </div>
       )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="w-10 h-10 rounded-full flex items-center justify-center bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-lg">
-              ↑
-            </span>
-            <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Revenus
-            </span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">
-            {summary.totalIncome.toLocaleString("fr-FR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}{" "}
-            €
-          </p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="w-10 h-10 rounded-full flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-lg">
-              ↓
-            </span>
-            <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Dépenses
-            </span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">
-            {summary.totalExpenses.toLocaleString("fr-FR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}{" "}
-            €
-          </p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-lg">
-              💰
-            </span>
-            <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Épargne
-            </span>
-          </div>
-          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {summary.totalSavings.toLocaleString("fr-FR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}{" "}
-            €
-          </p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <span
-              className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                summary.balance >= 0
-                  ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                  : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-              } text-lg`}
-            >
-              {summary.balance >= 0 ? "✓" : "!"}
-            </span>
-            <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Solde
-            </span>
-          </div>
-          <p
-            className={`text-2xl font-bold ${
-              summary.balance >= 0
-                ? "text-green-600 dark:text-green-400"
-                : "text-red-600 dark:text-red-400"
-            }`}
-          >
-            {summary.balance.toLocaleString("fr-FR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}{" "}
-            €
-          </p>
-        </div>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {summaryCards.map((card) => (
+          <StatCard
+            key={card.label}
+            {...card}
+            showChange={true}
+            comparisonLabel="vs année précédente"
+          />
+        ))}
       </div>
 
-      {/* Line chart */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">
-          📈 Évolution mensuelle
-        </h3>
-        {chartData.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16">
-            <span className="text-6xl mb-4">📊</span>
-            <p className="text-gray-400 dark:text-gray-500 text-center">
-              Aucune transaction pour cette année
-            </p>
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold">📈 Évolution mensuelle</h3>
+          <div className="flex gap-2">
+            <Button
+              variant={chartType === "line" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setChartType("line")}
+              className="gap-2"
+            >
+              <LineChartIcon className="h-4 w-4" />
+              Courbes
+            </Button>
+            <Button
+              variant={chartType === "bar" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setChartType("bar")}
+              className="gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Barres
+            </Button>
           </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={350}>
+        </div>
+
+        <ResponsiveContainer width="100%" height={350}>
+          {chartType === "line" ? (
             <LineChart data={chartData}>
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="#374151"
-                opacity={0.1}
+                stroke="hsl(var(--border))"
+                opacity={0.3}
               />
-              <XAxis
-                dataKey="month"
-                stroke="#9ca3af"
-                style={{ fontSize: "13px" }}
-              />
-              <YAxis stroke="#9ca3af" style={{ fontSize: "13px" }} />
+              <XAxis dataKey="month" {...axisStyle} />
+              <YAxis {...axisStyle} />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1f2937",
-                  border: "none",
-                  borderRadius: "12px",
-                  color: "#fff",
-                  boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
-                }}
-                labelStyle={{ color: "#d1d5db", marginBottom: "8px" }}
+                formatter={(value: number | undefined) =>
+                  value !== undefined ? `${formatCurrency(value)} €` : "0.00 €"
+                }
+                {...tooltipStyle}
               />
-              <Legend wrapperStyle={{ paddingTop: "20px" }} iconType="circle" />
+              <Legend
+                wrapperStyle={{ paddingTop: "20px" }}
+                iconType="circle"
+                iconSize={10}
+              />
               <Line
                 type="monotone"
                 dataKey="Revenus"
                 stroke="#10b981"
-                strokeWidth={3}
-                dot={{ r: 5, fill: "#10b981" }}
-                activeDot={{ r: 7 }}
+                strokeWidth={2.5}
+                dot={{ r: 4, fill: "#10b981", strokeWidth: 2 }}
+                activeDot={{ r: 6, strokeWidth: 0 }}
               />
               <Line
                 type="monotone"
                 dataKey="Dépenses"
                 stroke="#ef4444"
-                strokeWidth={3}
-                dot={{ r: 5, fill: "#ef4444" }}
-                activeDot={{ r: 7 }}
+                strokeWidth={2.5}
+                dot={{ r: 4, fill: "#ef4444", strokeWidth: 2 }}
+                activeDot={{ r: 6, strokeWidth: 0 }}
               />
               <Line
                 type="monotone"
                 dataKey="Épargne"
                 stroke="#3b82f6"
-                strokeWidth={3}
-                dot={{ r: 5, fill: "#3b82f6" }}
-                activeDot={{ r: 7 }}
+                strokeWidth={2.5}
+                dot={{ r: 4, fill: "#3b82f6", strokeWidth: 2 }}
+                activeDot={{ r: 6, strokeWidth: 0 }}
               />
             </LineChart>
-          </ResponsiveContainer>
+          ) : (
+            <BarChart data={chartData} barGap={8}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+                opacity={0.3}
+              />
+              <XAxis dataKey="month" {...axisStyle} />
+              <YAxis {...axisStyle} />
+              <Tooltip
+                formatter={(value: number | undefined) =>
+                  value !== undefined ? `${formatCurrency(value)} €` : "0.00 €"
+                }
+                {...tooltipStyle}
+              />
+              <Legend
+                wrapperStyle={{ paddingTop: "20px" }}
+                iconType="circle"
+                iconSize={10}
+              />
+              <Bar dataKey="Revenus" fill="#10b981" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="Dépenses" fill="#ef4444" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="Épargne" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      </Card>
+
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-6">
+          📊 Dépenses par catégorie et par mois
+        </h3>
+        {Object.keys(summary.expensesByCategoryByMonth).length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <span className="text-5xl mb-3">📊</span>
+            <p className="text-sm text-muted-foreground">Aucune donnée</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">
+                    Catégorie
+                  </th>
+                  {chartData.map((m) => (
+                    <th
+                      key={m.month}
+                      className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground"
+                    >
+                      {m.month}
+                    </th>
+                  ))}
+                  <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(summary.expensesByCategory)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([category, total]) => (
+                    <tr
+                      key={category}
+                      className="border-b hover:bg-muted/50 transition-colors"
+                    >
+                      <td className="py-3 px-4 font-medium">{category}</td>
+                      {chartData.map((m, i) => {
+                        const monthKey = `${year}-${String(i + 1).padStart(2, "0")}`;
+                        const amount =
+                          summary.expensesByCategoryByMonth[monthKey]?.[
+                            category
+                          ] || 0;
+                        return (
+                          <td
+                            key={m.month}
+                            className="text-right py-3 px-4 text-sm text-muted-foreground"
+                          >
+                            {amount > 0 ? `${formatCurrency(amount)} €` : "—"}
+                          </td>
+                        );
+                      })}
+                      <td className="text-right py-3 px-4 font-semibold">
+                        {formatCurrency(total)} €
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
-
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* Top categories */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-            🏆 Top 5 catégories
-          </h3>
-          {summary.topCategories.length === 0 ? (
-            <p className="text-center text-gray-400 dark:text-gray-500 py-8">
-              Aucune donnée
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {summary.topCategories.slice(0, 5).map((cat, index) => (
-                <div
-                  key={cat.category}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl font-bold text-gray-400 w-6">
-                      {index + 1}.
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {cat.category}
-                      </p>
-                      <span
-                        className={`inline-block text-xs px-2 py-0.5 rounded-full mt-1 ${
-                          cat.type === "expense"
-                            ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-300"
-                            : cat.type === "income"
-                              ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-300"
-                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300"
-                        }`}
-                      >
-                        {cat.type === "expense"
-                          ? "Dépense"
-                          : cat.type === "income"
-                            ? "Revenu"
-                            : "Épargne"}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-base font-bold text-gray-900 dark:text-white">
-                    {cat.amount.toLocaleString("fr-FR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{" "}
-                    €
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Month comparison */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-            📊 Comparaison mensuelle
-          </h3>
-          {summary.monthlyData.length === 0 ? (
-            <p className="text-center text-gray-400 dark:text-gray-500 py-8">
-              Aucune donnée
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {/* Highest */}
-              <div className="p-5 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 border border-red-200 dark:border-red-700 rounded-xl">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xl">🔥</span>
-                  <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wide">
-                    Mois le plus dépensier
-                  </p>
-                </div>
-                <p className="text-lg font-bold text-red-900 dark:text-red-200 mb-1">
-                  {new Date(
-                    summary.highestMonth.month + "-01",
-                  ).toLocaleDateString("fr-FR", {
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </p>
-                <p className="text-3xl font-bold text-red-600 dark:text-red-400">
-                  {summary.highestMonth.amount.toLocaleString("fr-FR", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  €
-                </p>
-              </div>
-
-              {/* Lowest */}
-              <div className="p-5 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 border border-green-200 dark:border-green-700 rounded-xl">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xl">🌱</span>
-                  <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">
-                    Mois le plus économe
-                  </p>
-                </div>
-                <p className="text-lg font-bold text-green-900 dark:text-green-200 mb-1">
-                  {new Date(
-                    summary.lowestMonth.month + "-01",
-                  ).toLocaleDateString("fr-FR", {
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </p>
-                <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                  {summary.lowestMonth.amount.toLocaleString("fr-FR", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  €
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      </Card>
     </div>
   );
 }

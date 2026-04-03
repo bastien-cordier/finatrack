@@ -1,3 +1,6 @@
+import { Button } from "./button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
 interface YearSelectorProps {
   activeYear: string;
   availableYears: string[];
@@ -26,29 +29,28 @@ export function YearSelector({
   };
 
   return (
-    <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 px-4 py-3">
-      {/* Previous year button */}
-      <button
+    <div className="flex items-center justify-center gap-4">
+      <Button
+        variant="outline"
+        size="icon"
         onClick={handlePrev}
         disabled={!canGoPrev}
-        className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
-        ←
-      </button>
+        <ChevronLeft className="h-4 w-4" />
+      </Button>
 
-      {/* Current year display */}
-      <span className="text-2xl font-bold text-gray-800 dark:text-white min-w-25 text-center">
-        {activeYear}
-      </span>
+      <div className="min-w-[100px] text-center">
+        <span className="text-3xl font-bold">{activeYear}</span>
+      </div>
 
-      {/* Next year button */}
-      <button
+      <Button
+        variant="outline"
+        size="icon"
         onClick={handleNext}
         disabled={!canGoNext}
-        className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
-        →
-      </button>
+        <ChevronRight className="h-4 w-4" />
+      </Button>
     </div>
   );
 }

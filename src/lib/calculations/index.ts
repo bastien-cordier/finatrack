@@ -1,4 +1,19 @@
 import type { Transaction, MonthlyResume } from "../../types";
+import { roundToTwo, calculatePercentage } from "../helpers";
+
+/**
+ * Calcule les pourcentages pour chaque catégorie
+ */
+function calculateCategoryPercentages(
+  byCategory: Record<string, number>,
+  total: number,
+): Record<string, number> {
+  const percentages: Record<string, number> = {};
+  Object.keys(byCategory).forEach((cat) => {
+    percentages[cat] = calculatePercentage(byCategory[cat], total);
+  });
+  return percentages;
+}
 
 export function calculateMonthlySummary(
   transactions: Transaction[],
@@ -10,6 +25,7 @@ export function calculateMonthlySummary(
   const incomeByCategory: Record<string, number> = {};
   const savingsByCategory: Record<string, number> = {};
 
+  // Agrégation des transactions par type et catégorie
   transactions.forEach((t) => {
     if (t.type === "expense") {
       totalExpenses += t.amount;
@@ -26,90 +42,68 @@ export function calculateMonthlySummary(
     }
   });
 
-  // Calculate percentages
-  const expensePercentages: Record<string, number> = {};
-  Object.keys(expensesByCategory).forEach((cat) => {
-    expensePercentages[cat] =
-      totalExpenses > 0
-        ? Math.round((expensesByCategory[cat] / totalExpenses) * 1000) / 10
-        : 0;
-  });
-
-  const incomePercentages: Record<string, number> = {};
-  Object.keys(incomeByCategory).forEach((cat) => {
-    incomePercentages[cat] =
-      totalIncome > 0
-        ? Math.round((incomeByCategory[cat] / totalIncome) * 1000) / 10
-        : 0;
-  });
-
-  const savingsPercentages: Record<string, number> = {};
-  Object.keys(savingsByCategory).forEach((cat) => {
-    savingsPercentages[cat] =
-      totalSavings > 0
-        ? Math.round((savingsByCategory[cat] / totalSavings) * 1000) / 10
-        : 0;
-  });
-
   return {
-    totalIncome: Math.round(totalIncome * 100) / 100,
-    totalExpenses: Math.round(totalExpenses * 100) / 100,
-    totalSavings: Math.round(totalSavings * 100) / 100,
-    balance:
-      Math.round((totalIncome - totalExpenses - totalSavings) * 100) / 100,
+    totalIncome: roundToTwo(totalIncome),
+    totalExpenses: roundToTwo(totalExpenses),
+    totalSavings: roundToTwo(totalSavings),
+    balance: roundToTwo(totalIncome - totalExpenses - totalSavings),
     expensesByCategory,
-    expensePercentages,
+    expensePercentages: calculateCategoryPercentages(
+      expensesByCategory,
+      totalExpenses,
+    ),
     incomeByCategory,
-    incomePercentages,
+    incomePercentages: calculateCategoryPercentages(
+      incomeByCategory,
+      totalIncome,
+    ),
     savingsByCategory,
-    savingsPercentages,
+    savingsPercentages: calculateCategoryPercentages(
+      savingsByCategory,
+      totalSavings,
+    ),
   };
 }
 
-// -----------------------------------------------------------
-// Calculate shared expenses split between 2 persons
-// Returns breakdown of shared expenses only
-// -----------------------------------------------------------
+/**
+ * Calcule la répartition des dépenses communes entre 2 personnes
+ * Retourne la ventilation des dépenses partagées uniquement
+ */
 export function calculateSharedSplit(
   transactions: Transaction[],
-  splitPercentages: Record<string, number>, // { person1Id: 50, person2Id: 50 }
+  splitPercentages: Record<string, number>,
 ) {
   let sharedTotal = 0;
   const sharedByCategory: Record<string, number> = {};
-  const paidByPerson: Record<string, number> = {}; // Who paid what
+  const paidByPerson: Record<string, number> = {};
 
+  // Agrégation des dépenses communes
   transactions.forEach((t) => {
-    // Only count shared expenses
     if (t.type === "expense" && t.isShared) {
       sharedTotal += t.amount;
-
-      // By category
       sharedByCategory[t.category] =
         (sharedByCategory[t.category] || 0) + t.amount;
 
-      // Track who paid
       if (t.paidBy) {
         paidByPerson[t.paidBy] = (paidByPerson[t.paidBy] || 0) + t.amount;
       }
     }
   });
 
-  // Calculate what each person should pay based on percentages
+  // Calcul de ce que chaque personne devrait payer
   const shouldPay: Record<string, number> = {};
-  Object.keys(splitPercentages).forEach((personId) => {
-    shouldPay[personId] = (sharedTotal * splitPercentages[personId]) / 100;
-  });
-
-  // Calculate who owes whom
   const balance: Record<string, number> = {};
-  Object.keys(shouldPay).forEach((personId) => {
+
+  Object.keys(splitPercentages).forEach((personId) => {
+    shouldPay[personId] = roundToTwo(
+      (sharedTotal * splitPercentages[personId]) / 100,
+    );
     const paid = paidByPerson[personId] || 0;
-    const owes = shouldPay[personId];
-    balance[personId] = paid - owes; // positive = should receive, negative = should pay
+    balance[personId] = roundToTwo(paid - shouldPay[personId]);
   });
 
   return {
-    sharedTotal: Math.round(sharedTotal * 100) / 100,
+    sharedTotal: roundToTwo(sharedTotal),
     sharedByCategory,
     paidByPerson,
     shouldPay,

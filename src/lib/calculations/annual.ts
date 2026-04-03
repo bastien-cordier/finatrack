@@ -1,7 +1,8 @@
 import type { Transaction } from "../../types";
+import { roundToTwo } from "../helpers";
 
 export interface MonthlyData {
-  month: string; // "2026-01"
+  month: string;
   income: number;
   expenses: number;
   savings: number;
@@ -20,32 +21,29 @@ export interface AnnualSummary {
   expensesByCategory: Record<string, number>;
   incomeByCategory: Record<string, number>;
   savingsByCategory: Record<string, number>;
+  expensesByCategoryByMonth: Record<string, Record<string, number>>;
 }
 
 export function calculateAnnualSummary(
   transactions: Transaction[],
   year: string,
 ): AnnualSummary {
-  // Filter transactions for this year
   const yearTransactions = transactions.filter((t) => t.date.startsWith(year));
 
-  // Initialize totals
   let totalIncome = 0;
   let totalExpenses = 0;
   let totalSavings = 0;
 
-  // Group by category
   const expensesByCategory: Record<string, number> = {};
   const incomeByCategory: Record<string, number> = {};
   const savingsByCategory: Record<string, number> = {};
-
-  // Group by month
   const monthlyMap: Record<string, MonthlyData> = {};
+  const expensesByCategoryByMonth: Record<string, Record<string, number>> = {};
 
+  // Agrégation des données
   yearTransactions.forEach((t) => {
-    const month = t.date.slice(0, 7); // "2026-01"
+    const month = t.date.slice(0, 7);
 
-    // Initialize month if needed
     if (!monthlyMap[month]) {
       monthlyMap[month] = {
         month,
@@ -56,7 +54,6 @@ export function calculateAnnualSummary(
       };
     }
 
-    // Add to totals and categories
     if (t.type === "income") {
       totalIncome += t.amount;
       incomeByCategory[t.category] =
@@ -67,6 +64,13 @@ export function calculateAnnualSummary(
       expensesByCategory[t.category] =
         (expensesByCategory[t.category] || 0) + t.amount;
       monthlyMap[month].expenses += t.amount;
+
+      // Track expenses by category by month
+      if (!expensesByCategoryByMonth[month]) {
+        expensesByCategoryByMonth[month] = {};
+      }
+      expensesByCategoryByMonth[month][t.category] =
+        (expensesByCategoryByMonth[month][t.category] || 0) + t.amount;
     } else if (t.type === "savings") {
       totalSavings += t.amount;
       savingsByCategory[t.category] =
@@ -75,27 +79,29 @@ export function calculateAnnualSummary(
     }
   });
 
-  // Calculate monthly balances
+  // Calcul des balances mensuelles
   Object.values(monthlyMap).forEach((month) => {
-    month.balance = month.income - month.expenses - month.savings;
+    month.balance = roundToTwo(month.income - month.expenses - month.savings);
   });
 
-  // Sort months chronologically
+  // Tri chronologique des mois
   const monthlyData = Object.values(monthlyMap).sort((a, b) =>
     a.month.localeCompare(b.month),
   );
 
-  // Find highest and lowest expense months
+  // Recherche des mois extrêmes
   const expenseMonths = monthlyData.map((m) => ({
     month: m.month,
     amount: m.expenses,
   }));
+
   const highestMonth =
     expenseMonths.length > 0
       ? expenseMonths.reduce((max, curr) =>
           curr.amount > max.amount ? curr : max,
         )
       : { month: "", amount: 0 };
+
   const lowestMonth =
     expenseMonths.length > 0
       ? expenseMonths.reduce((min, curr) =>
@@ -103,7 +109,7 @@ export function calculateAnnualSummary(
         )
       : { month: "", amount: 0 };
 
-  // Top categories (all types combined)
+  // Top catégories (tous types confondus)
   const allCategories = [
     ...Object.entries(expensesByCategory).map(([cat, amount]) => ({
       category: cat,
@@ -121,16 +127,16 @@ export function calculateAnnualSummary(
       type: "savings",
     })),
   ];
+
   const topCategories = allCategories
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 10);
 
   return {
-    totalIncome: Math.round(totalIncome * 100) / 100,
-    totalExpenses: Math.round(totalExpenses * 100) / 100,
-    totalSavings: Math.round(totalSavings * 100) / 100,
-    balance:
-      Math.round((totalIncome - totalExpenses - totalSavings) * 100) / 100,
+    totalIncome: roundToTwo(totalIncome),
+    totalExpenses: roundToTwo(totalExpenses),
+    totalSavings: roundToTwo(totalSavings),
+    balance: roundToTwo(totalIncome - totalExpenses - totalSavings),
     monthlyData,
     topCategories,
     highestMonth,
@@ -138,5 +144,6 @@ export function calculateAnnualSummary(
     expensesByCategory,
     incomeByCategory,
     savingsByCategory,
+    expensesByCategoryByMonth,
   };
 }

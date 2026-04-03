@@ -8,22 +8,7 @@ import {
   Legend,
 } from "recharts";
 import type { Person } from "../../types";
-
-// Color palette for the pie slices
-const COLORS = [
-  "#6366f1",
-  "#ec4899",
-  "#f59e0b",
-  "#10b981",
-  "#3b82f6",
-  "#8b5cf6",
-  "#ef4444",
-  "#14b8a6",
-  "#f97316",
-  "#84cc16",
-  "#06b6d4",
-  "#e11d48",
-];
+import { CHART_COLORS, calculatePercentage } from "../../lib/helpers";
 
 interface SharedExpensesViewProps {
   persons: Person[];
@@ -138,7 +123,7 @@ export function SharedExpensesView({
     .map(([name, value]) => ({
       name,
       value,
-      percentage: sharedTotal > 0 ? (value / sharedTotal) * 100 : 0,
+      percentage: calculatePercentage(value, sharedTotal),
     }))
     .sort((a, b) => b.value - a.value);
 
@@ -146,10 +131,7 @@ export function SharedExpensesView({
   const paidByData = persons.map((person) => ({
     name: person.name,
     value: paidByPerson[person.id] || 0,
-    percentage:
-      sharedTotal > 0
-        ? ((paidByPerson[person.id] || 0) / sharedTotal) * 100
-        : 0,
+    percentage: calculatePercentage(paidByPerson[person.id] || 0, sharedTotal),
   }));
 
   return (
@@ -188,7 +170,10 @@ export function SharedExpensesView({
                   dataKey="value"
                 >
                   {categoryData.map((_, index) => (
-                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                    <Cell
+                      key={index}
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    />
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />

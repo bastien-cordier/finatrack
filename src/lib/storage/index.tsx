@@ -3,6 +3,8 @@ import type { Transaction, AppConfig, Person } from "../../types";
 const STORAGE_KEYS = {
   TRANSACTIONS: "comptability_transactions",
   CONFIG: "comptability_config",
+  ACTIVE_PERSON: "comptability_active_person",
+  WELCOMED: "comptability_welcomed",
 } as const;
 
 function save<T>(key: string, data: T): void {
@@ -82,4 +84,24 @@ export function saveConfig(config: AppConfig): void {
 export function savePersons(persons: Person[]): void {
   const config = getConfig();
   saveConfig({ ...config, persons });
+}
+
+export function getActivePerson(): string | null {
+  return localStorage.getItem(STORAGE_KEYS.ACTIVE_PERSON);
+}
+
+export function saveActivePerson(personId: string | null): void {
+  if (personId) {
+    localStorage.setItem(STORAGE_KEYS.ACTIVE_PERSON, personId);
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.ACTIVE_PERSON);
+  }
+}
+
+export function isFirstVisit(): boolean {
+  return !localStorage.getItem(STORAGE_KEYS.WELCOMED);
+}
+
+export function markWelcomed(): void {
+  localStorage.setItem(STORAGE_KEYS.WELCOMED, "true");
 }

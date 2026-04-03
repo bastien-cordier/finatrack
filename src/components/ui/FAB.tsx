@@ -1,25 +1,18 @@
+import { Button } from "./button";
+import { Plus } from "lucide-react";
+
 interface FABProps {
   onClick: () => void;
 }
 
 export function FAB({ onClick }: FABProps) {
   return (
-    <button
+    <Button
+      size="lg"
       onClick={onClick}
-      className="
-        fixed bottom-6 right-6 z-40
-        w-14 h-14 rounded-full
-        bg-indigo-500 hover:bg-indigo-600
-        dark:bg-indigo-600 dark:hover:bg-indigo-700
-        text-white text-3xl font-light
-        shadow-lg hover:shadow-xl
-        transition-all duration-200
-        hover:scale-110
-        flex items-center justify-center
-      "
-      aria-label="Ajouter une transaction"
+      className="fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-2xl hover:shadow-primary/50 hover:scale-110 transition-all duration-300 z-40"
     >
-      +
-    </button>
+      <Plus className="h-7 w-7" />
+    </Button>
   );
 }

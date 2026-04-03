@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type {
   Transaction,
   TransactionType,
@@ -7,6 +7,19 @@ import type {
   Category,
 } from "../../types";
 import { addTransaction, updateTransaction } from "../../lib/storage";
+import { generateId } from "../../lib/helpers";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Switch } from "../ui/switch";
+import { Card } from "../ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Courses",
@@ -37,6 +50,7 @@ interface TransactionFormProps {
   onShowToast: (message: string) => void;
   editingTransaction?: Transaction | null;
   onCancelEdit?: () => void;
+  activePersonId?: string | null;
 }
 
 export function TransactionForm({
@@ -45,7 +59,21 @@ export function TransactionForm({
   onShowToast,
   editingTransaction = null,
   onCancelEdit,
+  activePersonId = null,
 }: TransactionFormProps) {
+  // Determine initial person based on context
+  const getInitialPersonId = () => {
+    if (editingTransaction?.personId) return editingTransaction.personId;
+    if (activePersonId) return activePersonId;
+    return persons[0]?.id ?? null;
+  };
+
+  const getInitialPaidBy = () => {
+    if (editingTransaction?.paidBy) return editingTransaction.paidBy;
+    if (activePersonId) return activePersonId;
+    return persons[0]?.id ?? null;
+  };
+
   // Initialize state from editingTransaction if present, otherwise use defaults
   const [type, setType] = useState<TransactionType>(
     editingTransaction?.type ?? "expense",
@@ -66,26 +94,8 @@ export function TransactionForm({
   const [isShared, setIsShared] = useState(
     editingTransaction?.isShared ?? false,
   );
-  const [personId, setPersonId] = useState<string | null>(
-    editingTransaction?.personId ?? persons[0]?.id ?? null,
-  );
-  const [paidBy, setPaidBy] = useState<string | null>(
-    editingTransaction?.paidBy ?? persons[0]?.id ?? null,
-  );
-
-  // When editingTransaction changes, populate the form
-  useEffect(() => {
-    if (editingTransaction) {
-      setType(editingTransaction.type);
-      setAmount(String(editingTransaction.amount));
-      setDate(editingTransaction.date);
-      setCategory(editingTransaction.category);
-      setDescription(editingTransaction.description);
-      setIsShared(editingTransaction.isShared);
-      setPersonId(editingTransaction.personId);
-      setPaidBy(editingTransaction.paidBy);
-    }
-  }, [editingTransaction]);
+  const [personId, setPersonId] = useState<string | null>(getInitialPersonId);
+  const [paidBy, setPaidBy] = useState<string | null>(getInitialPaidBy);
 
   const categories =
     type === "expense"
@@ -124,7 +134,7 @@ export function TransactionForm({
     if (!amount || !category || !date) return;
 
     const transaction: Transaction = {
-      id: editingTransaction?.id ?? `txn_${Date.now()}`,
+      id: editingTransaction?.id ?? generateId("txn"),
       amount: parseFloat(amount),
       date,
       category,
@@ -155,215 +165,207 @@ export function TransactionForm({
     resetForm();
   };
 
+  const activePerson = persons.find((p) => p.id === activePersonId);
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-6">
       {/* Edit mode indicator */}
       {editingTransaction && (
-        <div className="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg px-3 py-2 flex items-center justify-between">
-          <span className="text-sm text-indigo-600 dark:text-indigo-300 font-medium">
-            ✏️ Modification en cours
-          </span>
-          {onCancelEdit && (
-            <button
-              onClick={onCancelEdit}
-              className="text-xs text-indigo-500 dark:text-indigo-400 hover:underline"
-            >
-              Annuler
-            </button>
-          )}
-        </div>
+        <Card className="bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-indigo-600 dark:text-indigo-300 font-medium">
+              ✏️ Modification en cours
+            </span>
+            {onCancelEdit && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onCancelEdit}
+                className="h-auto py-1 text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-600"
+              >
+                Annuler
+              </Button>
+            )}
+          </div>
+        </Card>
       )}
 
-      {/* Toggle: Dépense / Revenu / Épargne */}
-      <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
-        <button
-          onClick={() => handleTypeChange("expense")}
-          className={`flex-1 py-2 text-xs font-semibold transition-colors
-            ${
+      {/* Active person indicator - only for new transactions */}
+      {!editingTransaction && activePerson && persons.length === 2 && (
+        <Card className="bg-muted/50 border-muted p-3">
+          <p className="text-sm text-muted-foreground">
+            Transaction attribuée à{" "}
+            <span className="font-semibold text-foreground">
+              {activePerson.name}
+            </span>
+          </p>
+        </Card>
+      )}
+
+      {/* Type selector */}
+      <div className="space-y-2">
+        <Label>Type de transaction</Label>
+        <div className="grid grid-cols-3 gap-2">
+          <Button
+            type="button"
+            variant={type === "expense" ? "default" : "outline"}
+            onClick={() => handleTypeChange("expense")}
+            className={
               type === "expense"
-                ? "bg-red-500 text-white"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-            }`}
-        >
-          Dépense
-        </button>
-        <button
-          onClick={() => handleTypeChange("income")}
-          className={`flex-1 py-2 text-xs font-semibold transition-colors
-            ${
+                ? "bg-rose-500 hover:bg-rose-600 text-white"
+                : ""
+            }
+          >
+            Dépense
+          </Button>
+          <Button
+            type="button"
+            variant={type === "income" ? "default" : "outline"}
+            onClick={() => handleTypeChange("income")}
+            className={
               type === "income"
-                ? "bg-green-500 text-white"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-            }`}
-        >
-          Revenu
-        </button>
-        <button
-          onClick={() => handleTypeChange("savings")}
-          className={`flex-1 py-2 text-xs font-semibold transition-colors
-            ${
+                ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                : ""
+            }
+          >
+            Revenu
+          </Button>
+          <Button
+            type="button"
+            variant={type === "savings" ? "default" : "outline"}
+            onClick={() => handleTypeChange("savings")}
+            className={
               type === "savings"
-                ? "bg-blue-500 text-white"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-            }`}
-        >
-          Épargne
-        </button>
+                ? "bg-blue-500 hover:bg-blue-600 text-white"
+                : ""
+            }
+          >
+            Épargne
+          </Button>
+        </div>
       </div>
 
       {/* Amount */}
-      <div>
-        <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-          Montant (€)
-        </label>
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="amount">Montant (€)</Label>
+        <Input
+          id="amount"
           type="number"
           min="0"
           step="0.01"
           placeholder="0.00"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>
 
       {/* Date */}
-      <div>
-        <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-          Date
-        </label>
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="date">Date</Label>
+        <Input
+          id="date"
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>
 
       {/* Category - hidden if savings */}
       {type !== "savings" && (
-        <div>
-          <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-            Catégorie
-          </label>
-          <select
+        <div className="space-y-2">
+          <Label htmlFor="category">Catégorie</Label>
+          <Select
             value={category}
-            onChange={(e) => setCategory(e.target.value as Category | "")}
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            onValueChange={(value) => setCategory(value as Category)}
           >
-            <option value="" disabled>
-              Choisir une catégorie
-            </option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="category">
+              <SelectValue placeholder="Choisir une catégorie" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((cat) => (
+                <SelectItem key={cat} value={cat}>
+                  {cat}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
       {/* Description */}
-      <div>
-        <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-          Description (optionnel)
-        </label>
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="description">Description (optionnel)</Label>
+        <Input
+          id="description"
           type="text"
           placeholder="Ex: Livret A"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>
 
       {/* Shared toggle */}
       {persons.length === 2 && (
-        <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 rounded-lg px-3 py-2">
-          <span className="text-sm text-gray-600 dark:text-gray-300">
-            {type === "savings"
-              ? "Épargne commune ?"
-              : type === "expense"
-                ? "Dépense commune ?"
-                : "Revenu commun ?"}
-          </span>
-          <button
-            onClick={() => setIsShared(!isShared)}
-            className={`relative w-11 h-6 rounded-full transition-colors duration-300
-              ${isShared ? "bg-indigo-500" : "bg-gray-300 dark:bg-gray-600"}`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${isShared ? "translate-x-5" : "translate-x-0"}`}
+        <Card className="p-4 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="shared-toggle" className="text-base">
+                {type === "savings"
+                  ? "Épargne commune"
+                  : type === "expense"
+                    ? "Dépense commune"
+                    : "Revenu commun"}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Partagée entre {persons[0].name} et {persons[1].name}
+              </p>
+            </div>
+            <Switch
+              id="shared-toggle"
+              checked={isShared}
+              onCheckedChange={setIsShared}
             />
-          </button>
-        </div>
-      )}
-
-      {/* NEW: "Paid by" selector - only if shared and 2 persons */}
-      {persons.length === 2 && isShared && (
-        <div>
-          <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-            Payé par
-          </label>
-          <div className="flex gap-2">
-            {persons.map((person) => (
-              <button
-                key={person.id}
-                onClick={() => setPaidBy(person.id)}
-                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors
-                  ${
-                    paidBy === person.id
-                      ? "bg-indigo-500 text-white"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-                  }`}
-              >
-                {person.name}
-              </button>
-            ))}
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Person selector - only if NOT shared and 2 persons */}
-      {persons.length === 2 && !isShared && (
-        <div>
-          <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-            Personne
-          </label>
-          <div className="flex gap-2">
+      {/* "Paid by" selector - only if shared and 2 persons */}
+      {persons.length === 2 && isShared && (
+        <div className="space-y-2">
+          <Label>Payé par</Label>
+          <div className="grid grid-cols-2 gap-2">
             {persons.map((person) => (
-              <button
+              <Button
                 key={person.id}
-                onClick={() => setPersonId(person.id)}
-                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors
-                  ${
-                    personId === person.id
-                      ? "bg-indigo-500 text-white"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-                  }`}
+                type="button"
+                variant={paidBy === person.id ? "default" : "outline"}
+                onClick={() => setPaidBy(person.id)}
               >
                 {person.name}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
       )}
 
       {/* Buttons */}
-      <div className="flex gap-2 mt-2">
-        <button
+      <div className="flex gap-3 pt-2">
+        <Button
+          type="button"
+          variant="outline"
           onClick={resetFormFull}
-          className="px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          className="flex-1"
         >
           Réinitialiser
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
           onClick={handleSubmit}
           disabled={!amount || !category || !date}
-          className="flex-1 py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white font-semibold transition-colors"
+          className="flex-1"
         >
           {editingTransaction ? "Modifier" : "Ajouter"}
-        </button>
+        </Button>
       </div>
     </div>
   );
