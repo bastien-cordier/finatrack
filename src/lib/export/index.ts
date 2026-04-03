@@ -1,5 +1,3 @@
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import type { Transaction, MonthlyResume } from "../../types";
 
 // -----------------------------------------------------------
@@ -250,12 +248,14 @@ export async function importFromJSON(
 // -----------------------------------------------------------
 // Export monthly report as PDF
 // -----------------------------------------------------------
-export function exportToPDF(
+export async function exportToPDF(
   transactions: Transaction[],
   summary: MonthlyResume,
   month: string,
   personName?: string,
-): void {
+): Promise<void> {
+  const { default: jsPDF } = await import("jspdf");
+  const { default: autoTable } = await import("jspdf-autotable");
   const doc = new jsPDF();
 
   // Format month for display

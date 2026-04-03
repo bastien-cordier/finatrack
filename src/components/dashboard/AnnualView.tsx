@@ -269,7 +269,7 @@ export function AnnualView({ transactions, year }: AnnualViewProps) {
         </ResponsiveContainer>
       </Card>
 
-      <Card className="p-6">
+      <Card className="p-4 md:p-6">
         <h3 className="text-lg font-semibold mb-6">
           📊 Dépenses par catégorie et par mois
         </h3>
@@ -279,57 +279,61 @@ export function AnnualView({ transactions, year }: AnnualViewProps) {
             <p className="text-sm text-muted-foreground">Aucune donnée</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">
-                    Catégorie
-                  </th>
-                  {chartData.map((m) => (
-                    <th
-                      key={m.month}
-                      className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground"
-                    >
-                      {m.month}
+          <div className="overflow-x-auto -mx-4 md:mx-0">
+            <div className="min-w-[600px] px-4 md:px-0">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-3 text-sm font-semibold text-muted-foreground sticky left-0 bg-card">
+                      Catégorie
                     </th>
-                  ))}
-                  <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(summary.expensesByCategory)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([category, total]) => (
-                    <tr
-                      key={category}
-                      className="border-b hover:bg-muted/50 transition-colors"
-                    >
-                      <td className="py-3 px-4 font-medium">{category}</td>
-                      {chartData.map((m, i) => {
-                        const monthKey = `${year}-${String(i + 1).padStart(2, "0")}`;
-                        const amount =
-                          summary.expensesByCategoryByMonth[monthKey]?.[
-                            category
-                          ] || 0;
-                        return (
-                          <td
-                            key={m.month}
-                            className="text-right py-3 px-4 text-sm text-muted-foreground"
-                          >
-                            {amount > 0 ? `${formatCurrency(amount)} €` : "—"}
-                          </td>
-                        );
-                      })}
-                      <td className="text-right py-3 px-4 font-semibold">
-                        {formatCurrency(total)} €
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+                    {chartData.map((m) => (
+                      <th
+                        key={m.month}
+                        className="text-right py-3 px-3 text-sm font-semibold text-muted-foreground"
+                      >
+                        {m.month}
+                      </th>
+                    ))}
+                    <th className="text-right py-3 px-3 text-sm font-semibold text-muted-foreground">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(summary.expensesByCategory)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([category, total]) => (
+                      <tr
+                        key={category}
+                        className="border-b hover:bg-muted/50 transition-colors"
+                      >
+                        <td className="py-3 px-3 font-medium text-sm sticky left-0 bg-card">
+                          {category}
+                        </td>
+                        {chartData.map((m, i) => {
+                          const monthKey = `${year}-${String(i + 1).padStart(2, "0")}`;
+                          const amount =
+                            summary.expensesByCategoryByMonth[monthKey]?.[
+                              category
+                            ] || 0;
+                          return (
+                            <td
+                              key={m.month}
+                              className="text-right py-3 px-3 text-sm text-muted-foreground"
+                            >
+                              {amount > 0 ? `${formatCurrency(amount)} €` : "—"}
+                            </td>
+                          );
+                        })}
+                        <td className="text-right py-3 px-3 font-semibold text-sm">
+                          {formatCurrency(total)} €
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </Card>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { useDarkMode } from "./hooks/useDarkMode";
 import { useModal } from "./hooks/useModal";
@@ -18,7 +18,7 @@ import { TransactionForm } from "./components/forms/TransactionForm";
 import { TransactionList } from "./components/dashboard/TransactionList";
 import { SummaryCards } from "./components/dashboard/SummaryCards";
 import { SharedExpensesView } from "./components/dashboard/SharedExpensesView";
-import { AnnualView } from "./components/dashboard/AnnualView";
+const AnnualView = lazy(() => import("./components/dashboard/AnnualView").then(m => ({ default: m.AnnualView })));
 import { ExpensePieChart } from "./components/charts/ExpensePieChart";
 import { PersonSettings } from "./components/ui/PersonSettings";
 import {
@@ -51,9 +51,12 @@ function AppContent() {
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
     getTransactions(),
   );
-  const [activeMonth, setActiveMonth] = useState<string>(
-    new Date().toISOString().slice(0, 7),
-  );
+  const [activeMonth, setActiveMonth] = useState<string>(() => {
+    const saved = getTransactions();
+    if (saved.length === 0) return new Date().toISOString().slice(0, 7);
+    const months = [...new Set(saved.map((t) => t.date.slice(0, 7)))];
+    return months.sort((a, b) => b.localeCompare(a))[0];
+  });
   const [activeYear, setActiveYear] = useState<string>(
     new Date().getFullYear().toString(),
   );
@@ -241,12 +244,12 @@ function AppContent() {
     );
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     const personName = activePerson
       ? config.persons.find((p) => p.id === activePerson)?.name
       : undefined;
 
-    exportToPDF(
+    await exportToPDF(
       filteredMonthlyTransactions,
       monthlySummary,
       activeMonth,
@@ -313,7 +316,7 @@ function AppContent() {
           subtitle={pageSubtitle}
         />
 
-        <main className="flex-1 overflow-y-auto p-6 space-y-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
           <Routes>
             {/* Monthly view */}
             <Route
@@ -321,7 +324,7 @@ function AppContent() {
               element={
                 <>
                   {availableMonths.length > 0 && (
-                    <div className="flex justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div className="text-2xl font-bold">
                         Hello{" "}
                         {config.persons.find((p) => p.id === activePerson)
@@ -389,7 +392,7 @@ function AppContent() {
                 <>
                   {availableYears.length > 0 ? (
                     <>
-                      <div className="flex justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="text-2xl font-bold">
                           Hello{" "}
                           {config.persons.find((p) => p.id === activePerson)
@@ -403,10 +406,12 @@ function AppContent() {
                         />
                       </div>
 
-                      <AnnualView
-                        transactions={filteredAnnualTransactions}
-                        year={activeYear}
-                      />
+                      <Suspense fallback={<div className="flex justify-center py-20 text-muted-foreground">Chargement...</div>}>
+                        <AnnualView
+                          transactions={filteredAnnualTransactions}
+                          year={activeYear}
+                        />
+                      </Suspense>
                     </>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-20">
