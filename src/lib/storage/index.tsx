@@ -14,7 +14,11 @@ function save<T>(key: string, data: T): void {
 function load<T>(key: string): T | null {
   const raw = localStorage.getItem(key);
   if (!raw) return null;
-  return JSON.parse(raw) as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
 export function getTransactions(): Transaction[] {

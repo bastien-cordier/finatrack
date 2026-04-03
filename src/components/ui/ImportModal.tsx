@@ -39,6 +39,12 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const MAX_SIZE = 5 * 1024 * 1024; // 5 Mo
+    if (file.size > MAX_SIZE) {
+      setError("Le fichier est trop volumineux (max 5 Mo).");
+      return;
+    }
+
     setSelectedFile(file);
     setError(null);
 

@@ -133,9 +133,12 @@ export function TransactionForm({
   const handleSubmit = () => {
     if (!amount || !category || !date) return;
 
+    const parsedAmount = parseFloat(amount);
+    if (!isFinite(parsedAmount) || parsedAmount <= 0) return;
+
     const transaction: Transaction = {
       id: editingTransaction?.id ?? generateId("txn"),
-      amount: parseFloat(amount),
+      amount: parsedAmount,
       date,
       category,
       type,

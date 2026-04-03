@@ -389,21 +389,23 @@ function AppContent() {
                 <>
                   {availableYears.length > 0 ? (
                     <>
-                      <YearSelector
-                        activeYear={activeYear}
-                        availableYears={availableYears}
-                        onChange={setActiveYear}
-                      />
+                      <div className="flex justify-between">
+                        <div className="text-2xl font-bold">
+                          Hello{" "}
+                          {config.persons.find((p) => p.id === activePerson)
+                            ?.name || "Guest"}{" "}
+                          👋🏼
+                        </div>
+                        <YearSelector
+                          activeYear={activeYear}
+                          availableYears={availableYears}
+                          onChange={setActiveYear}
+                        />
+                      </div>
 
                       <AnnualView
                         transactions={filteredAnnualTransactions}
                         year={activeYear}
-                        personName={
-                          activePerson
-                            ? config.persons.find((p) => p.id === activePerson)
-                                ?.name
-                            : undefined
-                        }
                       />
                     </>
                   ) : (

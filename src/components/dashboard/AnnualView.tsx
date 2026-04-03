@@ -33,14 +33,9 @@ import { useDarkModeDetection } from "../../hooks/useDarkModeDetection";
 interface AnnualViewProps {
   transactions: Transaction[];
   year: string;
-  personName?: string;
 }
 
-export function AnnualView({
-  transactions,
-  year,
-  personName,
-}: AnnualViewProps) {
+export function AnnualView({ transactions, year }: AnnualViewProps) {
   const [chartType, setChartType] = useState<"line" | "bar">("line");
   const isDarkMode = useDarkModeDetection();
 
@@ -164,15 +159,6 @@ export function AnnualView({
 
   return (
     <div className="space-y-6">
-      {personName && (
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-xl px-4 py-3">
-          <p className="text-sm text-indigo-700 dark:text-indigo-300">
-            📊 Statistiques annuelles de{" "}
-            <span className="font-semibold">{personName}</span>
-          </p>
-        </div>
-      )}
-
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {summaryCards.map((card) => (
           <StatCard

@@ -55,8 +55,12 @@ async function encryptData(data: string, password: string): Promise<string> {
   combined.set(iv, salt.length);
   combined.set(new Uint8Array(encrypted), salt.length + iv.length);
 
-  // Convert to base64 for easy storage/transport
-  return btoa(String.fromCharCode(...combined));
+  // Convert to base64 for easy storage/transport (loop evite un stack overflow sur les grands fichiers)
+  let binary = "";
+  for (let i = 0; i < combined.length; i++) {
+    binary += String.fromCharCode(combined[i]);
+  }
+  return btoa(binary);
 }
 
 // Decrypt data
@@ -137,6 +141,74 @@ export async function exportToJSON(
   URL.revokeObjectURL(url);
 }
 
+const VALID_TYPES = new Set(["expense", "income", "savings"]);
+const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+const DATE_REGEX = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+function validateImportedData(data: unknown): {
+  transactions: Transaction[];
+  month: string;
+} {
+  if (!data || typeof data !== "object") {
+    throw new Error("Format de fichier invalide.");
+  }
+  const d = data as Record<string, unknown>;
+
+  if (typeof d.month !== "string" || !MONTH_REGEX.test(d.month)) {
+    throw new Error("Le champ 'month' est manquant ou invalide.");
+  }
+  if (!Array.isArray(d.transactions)) {
+    throw new Error("Le champ 'transactions' est manquant ou invalide.");
+  }
+
+  const transactions: Transaction[] = d.transactions.map((t: unknown, i) => {
+    if (!t || typeof t !== "object") {
+      throw new Error(`Transaction #${i + 1} invalide.`);
+    }
+    const tx = t as Record<string, unknown>;
+
+    if (typeof tx.id !== "string" || !tx.id) {
+      throw new Error(`Transaction #${i + 1} : 'id' manquant.`);
+    }
+    if (
+      typeof tx.amount !== "number" ||
+      !isFinite(tx.amount) ||
+      tx.amount <= 0
+    ) {
+      throw new Error(`Transaction #${i + 1} : montant invalide.`);
+    }
+    if (typeof tx.date !== "string" || !DATE_REGEX.test(tx.date)) {
+      throw new Error(`Transaction #${i + 1} : date invalide.`);
+    }
+    if (typeof tx.type !== "string" || !VALID_TYPES.has(tx.type)) {
+      throw new Error(`Transaction #${i + 1} : type invalide.`);
+    }
+    if (typeof tx.category !== "string" || !tx.category) {
+      throw new Error(`Transaction #${i + 1} : catégorie invalide.`);
+    }
+    if (typeof tx.isShared !== "boolean") {
+      throw new Error(`Transaction #${i + 1} : 'isShared' invalide.`);
+    }
+
+    return {
+      id: tx.id,
+      amount: tx.amount,
+      date: tx.date,
+      category: tx.category as Transaction["category"],
+      type: tx.type as Transaction["type"],
+      description:
+        typeof tx.description === "string" ? tx.description.slice(0, 500) : "",
+      isShared: tx.isShared,
+      personId:
+        typeof tx.personId === "string" ? tx.personId : null,
+      paidBy:
+        typeof tx.paidBy === "string" ? tx.paidBy : null,
+    };
+  });
+
+  return { transactions, month: d.month };
+}
+
 // -----------------------------------------------------------
 // Import and decrypt JSON file
 // -----------------------------------------------------------
@@ -144,36 +216,35 @@ export async function importFromJSON(
   file: File,
   password?: string,
 ): Promise<{ transactions: Transaction[]; month: string }> {
+  const MAX_SIZE = 5 * 1024 * 1024; // 5 Mo
+  if (file.size > MAX_SIZE) {
+    throw new Error("Fichier trop volumineux (max 5 Mo).");
+  }
+
   const text = await file.text();
 
+  // Tentative de parsing JSON (fichier non chiffré)
+  let parsed: unknown = null;
+  let isValidJson = false;
   try {
-    // Try to parse as plain JSON first
-    const data = JSON.parse(text);
-
-    if (data.encrypted) {
-      throw new Error(
-        "Ce fichier est chiffré. Veuillez fournir un mot de passe.",
-      );
-    }
-
-    return {
-      transactions: data.transactions,
-      month: data.month,
-    };
+    parsed = JSON.parse(text);
+    isValidJson = true;
   } catch {
-    // If parsing fails, assume it's encrypted
-    if (!password) {
-      throw new Error("Ce fichier est chiffré. Mot de passe requis.");
-    }
-
-    const decrypted = await decryptData(text, password);
-    const data = JSON.parse(decrypted);
-
-    return {
-      transactions: data.transactions,
-      month: data.month,
-    };
+    isValidJson = false;
   }
+
+  if (isValidJson && parsed && !(parsed as Record<string, unknown>).encrypted) {
+    return validateImportedData(parsed);
+  }
+
+  // Fichier chiffré
+  if (!password) {
+    throw new Error("Ce fichier est chiffré. Mot de passe requis.");
+  }
+
+  const decrypted = await decryptData(text, password);
+  const decryptedData = JSON.parse(decrypted);
+  return validateImportedData(decryptedData);
 }
 
 // -----------------------------------------------------------
