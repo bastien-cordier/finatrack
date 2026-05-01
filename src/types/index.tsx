@@ -5,6 +5,8 @@ export type ExpenseCategory =
   | "Voiture"
   | "Logement"
   | "Santé"
+  | "Assurances"
+  | "Sport"
   | "Divertissement"
   | "Shopping"
   | "Abonnements"

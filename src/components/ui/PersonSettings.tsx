@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Person } from "../../types";
+import { generateId, MAX_PERSON_NAME_LENGTH } from "../../lib/helpers";
 
 interface PersonSettingsProps {
   persons: Person[];
@@ -14,7 +15,7 @@ export function PersonSettings({ persons, onSave }: PersonSettingsProps) {
     if (localPersons.length >= 2) return; // Max 2 persons
 
     const newPerson: Person = {
-      id: `person_${Date.now()}`,
+      id: generateId("person"),
       name: `Personne ${localPersons.length + 1}`,
     };
     setLocalPersons([...localPersons, newPerson]);
@@ -26,8 +27,9 @@ export function PersonSettings({ persons, onSave }: PersonSettingsProps) {
   };
 
   const handleUpdateName = (id: string, name: string) => {
+    const capped = name.slice(0, MAX_PERSON_NAME_LENGTH);
     setLocalPersons(
-      localPersons.map((p) => (p.id === id ? { ...p, name } : p)),
+      localPersons.map((p) => (p.id === id ? { ...p, name: capped } : p)),
     );
   };
 
@@ -86,6 +88,7 @@ export function PersonSettings({ persons, onSave }: PersonSettingsProps) {
             type="text"
             value={person.name}
             onChange={(e) => handleUpdateName(person.id, e.target.value)}
+            maxLength={MAX_PERSON_NAME_LENGTH}
             className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             placeholder="Nom"
           />

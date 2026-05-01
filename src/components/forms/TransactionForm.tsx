@@ -28,6 +28,8 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Voiture",
   "Logement",
   "Santé",
+  "Assurances",
+  "Sport",
   "Divertissement",
   "Shopping",
   "Abonnements",

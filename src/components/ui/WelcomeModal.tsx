@@ -3,6 +3,7 @@ import { Input } from "./input";
 import { Button } from "./button";
 import { Label } from "./label";
 import { Card, CardContent, CardHeader } from "./card";
+import { MAX_PERSON_NAME_LENGTH } from "../../lib/helpers";
 
 interface WelcomeModalProps {
   isOpen: boolean;
@@ -16,7 +17,7 @@ export function WelcomeModal({ isOpen, onSubmit }: WelcomeModalProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = name.trim();
+    const trimmed = name.trim().slice(0, MAX_PERSON_NAME_LENGTH);
     if (!trimmed) return;
     onSubmit(trimmed);
   };
@@ -43,6 +44,7 @@ export function WelcomeModal({ isOpen, onSubmit }: WelcomeModalProps) {
                 placeholder="ex : Alice"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                maxLength={MAX_PERSON_NAME_LENGTH}
                 autoFocus
                 className="h-10 text-base"
               />

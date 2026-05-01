@@ -1,4 +1,34 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+type StrengthLevel = 0 | 1 | 2 | 3 | 4;
+
+function evaluatePasswordStrength(password: string): {
+  level: StrengthLevel;
+  label: string;
+  colorClass: string;
+} {
+  if (!password) {
+    return { level: 0, label: "", colorClass: "bg-gray-200 dark:bg-gray-600" };
+  }
+
+  let score = 0;
+  if (password.length >= 12) score++;
+  if (password.length >= 16) score++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+  if (password.length < 12) score = Math.min(score, 1);
+
+  const level = Math.min(score, 4) as StrengthLevel;
+  const meta: Record<StrengthLevel, { label: string; colorClass: string }> = {
+    0: { label: "Très faible", colorClass: "bg-red-500" },
+    1: { label: "Faible", colorClass: "bg-red-500" },
+    2: { label: "Moyen", colorClass: "bg-amber-500" },
+    3: { label: "Bon", colorClass: "bg-emerald-500" },
+    4: { label: "Excellent", colorClass: "bg-emerald-600" },
+  };
+  return { level, ...meta[level] };
+}
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -17,6 +47,8 @@ export function ExportModal({
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  const strength = useMemo(() => evaluatePasswordStrength(password), [password]);
 
   // Close on Escape
   useEffect(() => {
@@ -50,8 +82,8 @@ export function ExportModal({
         alert("Les mots de passe ne correspondent pas");
         return;
       }
-      if (password.length < 8) {
-        alert("Le mot de passe doit contenir au moins 8 caractères");
+      if (password.length < 12) {
+        alert("Le mot de passe doit contenir au moins 12 caractères");
         return;
       }
     }
@@ -102,7 +134,7 @@ export function ExportModal({
           <div className="space-y-3 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Mot de passe (min. 8 caractères)
+                Mot de passe (min. 12 caractères)
               </label>
               <input
                 type="password"
@@ -111,6 +143,25 @@ export function ExportModal({
                 placeholder="Laissez vide pour export non chiffré"
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
+              {password && (
+                <div className="mt-2">
+                  <div className="flex gap-1">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className={`h-1 flex-1 rounded-full transition-colors ${
+                          i < strength.level
+                            ? strength.colorClass
+                            : "bg-gray-200 dark:bg-gray-600"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs mt-1 text-gray-600 dark:text-gray-400">
+                    Force : <span className="font-medium">{strength.label}</span>
+                  </p>
+                </div>
+              )}
             </div>
 
             {password && (
@@ -139,7 +190,7 @@ export function ExportModal({
             <button
               onClick={() => handleJSONExport(true)}
               disabled={
-                !password || password !== confirmPassword || password.length < 8
+                !password || password !== confirmPassword || password.length < 12
               }
               className="flex-1 px-4 py-2 rounded-lg bg-indigo-500 text-white font-medium hover:bg-indigo-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
             >

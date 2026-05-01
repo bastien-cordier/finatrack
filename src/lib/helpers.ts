@@ -2,6 +2,8 @@
 // CONSTANTES
 // ============================================
 
+export const MAX_PERSON_NAME_LENGTH = 50;
+
 export const CHART_COLORS = [
   "#6366f1",
   "#ec4899",
@@ -86,10 +88,10 @@ export function getInitials(name: string): string {
 }
 
 /**
- * Génère un ID unique basé sur le timestamp
+ * Génère un ID unique cryptographiquement aléatoire
  */
 export function generateId(prefix: string = "id"): string {
-  return `${prefix}_${Date.now()}`;
+  return `${prefix}_${crypto.randomUUID()}`;
 }
 
 /**

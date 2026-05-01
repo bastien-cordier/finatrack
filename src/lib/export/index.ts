@@ -4,10 +4,22 @@ import type { Transaction, MonthlyResume } from "../../types";
 // Crypto utilities for encrypted exports
 // -----------------------------------------------------------
 
+// PBKDF2 iteration count. OWASP 2023 recommandation pour SHA-256.
+// Stocké dans le blob chiffré (cf. format ci-dessous) pour permettre une augmentation
+// future sans casser les anciens fichiers : on lit la valeur du fichier au déchiffrement.
+const PBKDF2_ITERATIONS = 600_000;
+const LEGACY_PBKDF2_ITERATIONS = 100_000;
+
+// Format du blob chiffré (base64) :
+//   v2 : [magic 'FH2' (3o)] [salt 16o] [iv 12o] [iterations BE32 4o] [ciphertext]
+//   v1 (legacy, pour compat) : [salt 16o] [iv 12o] [ciphertext]  → 100k itérations
+const MAGIC_V2 = new Uint8Array([0x46, 0x48, 0x32]); // "FH2"
+
 // Generate a key from a password using PBKDF2
 async function deriveKey(
   password: string,
   salt: Uint8Array,
+  iterations: number,
 ): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const keyMaterial = await window.crypto.subtle.importKey(
@@ -21,8 +33,8 @@ async function deriveKey(
   return window.crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt: salt as BufferSource, // Cast explicite
-      iterations: 100000,
+      salt: salt as BufferSource,
+      iterations,
       hash: "SHA-256",
     },
     keyMaterial,
@@ -32,12 +44,30 @@ async function deriveKey(
   );
 }
 
-// Encrypt data with AES-256-GCM
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// Encrypt data with AES-256-GCM (format v2)
 async function encryptData(data: string, password: string): Promise<string> {
   const encoder = new TextEncoder();
   const salt = window.crypto.getRandomValues(new Uint8Array(16));
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(password, salt);
+  const iterations = PBKDF2_ITERATIONS;
+  const key = await deriveKey(password, salt, iterations);
 
   const encrypted = await window.crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv },
@@ -45,46 +75,80 @@ async function encryptData(data: string, password: string): Promise<string> {
     encoder.encode(data),
   );
 
-  // Combine salt + iv + encrypted data into a single buffer
-  const combined = new Uint8Array(
-    salt.length + iv.length + encrypted.byteLength,
-  );
-  combined.set(salt, 0);
-  combined.set(iv, salt.length);
-  combined.set(new Uint8Array(encrypted), salt.length + iv.length);
+  const iterBytes = new Uint8Array(4);
+  new DataView(iterBytes.buffer).setUint32(0, iterations, false);
 
-  // Convert to base64 for easy storage/transport (loop evite un stack overflow sur les grands fichiers)
-  let binary = "";
-  for (let i = 0; i < combined.length; i++) {
-    binary += String.fromCharCode(combined[i]);
-  }
-  return btoa(binary);
+  const combined = new Uint8Array(
+    MAGIC_V2.length + salt.length + iv.length + iterBytes.length + encrypted.byteLength,
+  );
+  let offset = 0;
+  combined.set(MAGIC_V2, offset);
+  offset += MAGIC_V2.length;
+  combined.set(salt, offset);
+  offset += salt.length;
+  combined.set(iv, offset);
+  offset += iv.length;
+  combined.set(iterBytes, offset);
+  offset += iterBytes.length;
+  combined.set(new Uint8Array(encrypted), offset);
+
+  return bytesToBase64(combined);
 }
 
-// Decrypt data
+// Decrypt data (auto-détecte v1 legacy / v2)
 async function decryptData(
   encryptedBase64: string,
   password: string,
 ): Promise<string> {
-  // Decode base64 string to binary
-  const binaryString = atob(encryptedBase64);
-  const combined = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    combined[i] = binaryString.charCodeAt(i);
+  const combined = base64ToBytes(encryptedBase64);
+
+  let salt: Uint8Array;
+  let iv: Uint8Array;
+  let iterations: number;
+  let encrypted: Uint8Array;
+
+  const hasMagic =
+    combined.length >= MAGIC_V2.length &&
+    combined[0] === MAGIC_V2[0] &&
+    combined[1] === MAGIC_V2[1] &&
+    combined[2] === MAGIC_V2[2];
+
+  if (hasMagic) {
+    if (combined.length < MAGIC_V2.length + 16 + 12 + 4) {
+      throw new Error("Fichier chiffré corrompu.");
+    }
+    let offset = MAGIC_V2.length;
+    salt = combined.slice(offset, offset + 16);
+    offset += 16;
+    iv = combined.slice(offset, offset + 12);
+    offset += 12;
+    iterations = new DataView(
+      combined.buffer,
+      combined.byteOffset + offset,
+      4,
+    ).getUint32(0, false);
+    offset += 4;
+    encrypted = combined.slice(offset);
+    if (iterations < 50_000 || iterations > 10_000_000) {
+      throw new Error("Fichier chiffré corrompu.");
+    }
+  } else {
+    if (combined.length < 16 + 12) {
+      throw new Error("Fichier chiffré corrompu.");
+    }
+    salt = combined.slice(0, 16);
+    iv = combined.slice(16, 28);
+    encrypted = combined.slice(28);
+    iterations = LEGACY_PBKDF2_ITERATIONS;
   }
 
-  // Extract salt, iv, and encrypted data
-  const salt = combined.slice(0, 16);
-  const iv = combined.slice(16, 28);
-  const encrypted = combined.slice(28);
-
-  const key = await deriveKey(password, salt);
+  const key = await deriveKey(password, salt, iterations);
 
   try {
     const decrypted = await window.crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: iv },
+      { name: "AES-GCM", iv: iv as BufferSource },
       key,
-      encrypted,
+      encrypted as BufferSource,
     );
 
     const decoder = new TextDecoder();
@@ -139,11 +203,47 @@ export async function exportToJSON(
   URL.revokeObjectURL(url);
 }
 
-const VALID_TYPES = new Set(["expense", "income", "savings"]);
+const VALID_TYPES = new Set<Transaction["type"]>([
+  "expense",
+  "income",
+  "savings",
+]);
 const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DATE_REGEX = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const ID_REGEX = /^[A-Za-z0-9_-]{1,128}$/;
+const MAX_AMOUNT = 1_000_000_000; // 1 milliard €
 
-function validateImportedData(data: unknown): {
+const VALID_CATEGORIES_BY_TYPE: Record<Transaction["type"], Set<string>> = {
+  expense: new Set<string>([
+    "Courses",
+    "Restaurants / Fast-food",
+    "Cantine",
+    "Voiture",
+    "Logement",
+    "Santé",
+    "Assurances",
+    "Sport",
+    "Divertissement",
+    "Shopping",
+    "Abonnements",
+    "Vacances",
+    "Utilitaires",
+    "Autres",
+  ]),
+  income: new Set<string>([
+    "Salaire",
+    "Cadeaux",
+    "Remboursements maladie",
+    "Remboursements classique",
+    "Autres",
+  ]),
+  savings: new Set<string>(["Épargne"]),
+};
+
+function validateImportedData(
+  data: unknown,
+  validPersonIds: Set<string>,
+): {
   transactions: Transaction[];
   month: string;
 } {
@@ -165,42 +265,56 @@ function validateImportedData(data: unknown): {
     }
     const tx = t as Record<string, unknown>;
 
-    if (typeof tx.id !== "string" || !tx.id) {
-      throw new Error(`Transaction #${i + 1} : 'id' manquant.`);
+    if (typeof tx.id !== "string" || !ID_REGEX.test(tx.id)) {
+      throw new Error(`Transaction #${i + 1} : 'id' invalide.`);
     }
     if (
       typeof tx.amount !== "number" ||
       !isFinite(tx.amount) ||
-      tx.amount <= 0
+      tx.amount <= 0 ||
+      tx.amount > MAX_AMOUNT
     ) {
       throw new Error(`Transaction #${i + 1} : montant invalide.`);
     }
     if (typeof tx.date !== "string" || !DATE_REGEX.test(tx.date)) {
       throw new Error(`Transaction #${i + 1} : date invalide.`);
     }
-    if (typeof tx.type !== "string" || !VALID_TYPES.has(tx.type)) {
+    if (typeof tx.type !== "string" || !VALID_TYPES.has(tx.type as Transaction["type"])) {
       throw new Error(`Transaction #${i + 1} : type invalide.`);
     }
-    if (typeof tx.category !== "string" || !tx.category) {
-      throw new Error(`Transaction #${i + 1} : catégorie invalide.`);
+    const txType = tx.type as Transaction["type"];
+    if (
+      typeof tx.category !== "string" ||
+      !VALID_CATEGORIES_BY_TYPE[txType].has(tx.category)
+    ) {
+      throw new Error(
+        `Transaction #${i + 1} : catégorie invalide pour le type "${txType}".`,
+      );
     }
     if (typeof tx.isShared !== "boolean") {
       throw new Error(`Transaction #${i + 1} : 'isShared' invalide.`);
     }
+
+    const personId =
+      typeof tx.personId === "string" && validPersonIds.has(tx.personId)
+        ? tx.personId
+        : null;
+    const paidBy =
+      typeof tx.paidBy === "string" && validPersonIds.has(tx.paidBy)
+        ? tx.paidBy
+        : null;
 
     return {
       id: tx.id,
       amount: tx.amount,
       date: tx.date,
       category: tx.category as Transaction["category"],
-      type: tx.type as Transaction["type"],
+      type: txType,
       description:
         typeof tx.description === "string" ? tx.description.slice(0, 500) : "",
       isShared: tx.isShared,
-      personId:
-        typeof tx.personId === "string" ? tx.personId : null,
-      paidBy:
-        typeof tx.paidBy === "string" ? tx.paidBy : null,
+      personId: tx.isShared ? null : personId,
+      paidBy: tx.isShared ? paidBy : null,
     };
   });
 
@@ -212,13 +326,15 @@ function validateImportedData(data: unknown): {
 // -----------------------------------------------------------
 export async function importFromJSON(
   file: File,
-  password?: string,
+  password: string | undefined,
+  validPersonIds: string[],
 ): Promise<{ transactions: Transaction[]; month: string }> {
   const MAX_SIZE = 5 * 1024 * 1024; // 5 Mo
   if (file.size > MAX_SIZE) {
     throw new Error("Fichier trop volumineux (max 5 Mo).");
   }
 
+  const validIds = new Set(validPersonIds);
   const text = await file.text();
 
   // Tentative de parsing JSON (fichier non chiffré)
@@ -232,7 +348,7 @@ export async function importFromJSON(
   }
 
   if (isValidJson && parsed && !(parsed as Record<string, unknown>).encrypted) {
-    return validateImportedData(parsed);
+    return validateImportedData(parsed, validIds);
   }
 
   // Fichier chiffré
@@ -242,7 +358,7 @@ export async function importFromJSON(
 
   const decrypted = await decryptData(text, password);
   const decryptedData = JSON.parse(decrypted);
-  return validateImportedData(decryptedData);
+  return validateImportedData(decryptedData, validIds);
 }
 
 // -----------------------------------------------------------

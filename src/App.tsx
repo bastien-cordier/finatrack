@@ -262,6 +262,7 @@ function AppContent() {
     const { transactions: importedTransactions, month } = await importFromJSON(
       file,
       password,
+      config.persons.map((p) => p.id),
     );
 
     const shouldReplace = window.confirm(
